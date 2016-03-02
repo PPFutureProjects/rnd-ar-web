@@ -61,36 +61,29 @@ ARBase.prototype.createRendererAndScene = function () {
             mesh,
             scale;
 
-        geometry.computeFaceNormals();
-        geometry.computeVertexNormals();
-
-        mats = new THREE.MeshFaceMaterial(materials);
-
-        mesh = new THREE.SkinnedMesh(geometry, mats);
-        mesh.visible = false;
-
-        self.scene.add(mesh);
+        // material
+        for ( var i = 0; i < materials.length; i ++ ) {
+            var m = materials[ i ];
+            m.skinning = true;
+            m.morphTargets = true;
+            m.specular.setHSL( 0, 0, 0.1 );
+            m.color.setHSL( 0.6, 0, 0.6 );
+        }
         
-        // animation
-        self.animation_mixer = new THREE.AnimationMixer( self.scene );
-        self.animation_clip = self.animation_mixer.clipAction( geometry.animations[0] );
-        self.animation_clip.play();
+        // mesh
+        var mesh = new THREE.SkinnedMesh( geometry, new THREE.MultiMaterial( materials ) );
+		mesh.name = "Knight Mesh";
+        self.scene.add( mesh );
 
         self.animated_mesh = mesh;
+
+        // animation
+        self.animation_mixer = new THREE.AnimationMixer( mesh );
+        self.bones_clip = geometry.animations[0];
+
+        self.anim_action = self.animation_mixer.clipAction( self.bones_clip, null );
+        self.anim_action.play();
     });
-
-    { // box
-        var mat = new THREE.MeshBasicMaterial({
-            color : "#00FF00",
-            transparent: true,
-            opacity: 0.5
-        });
-
-        var geom = new THREE.BoxGeometry(10, 10, 10);
-        var mesh = new THREE.Mesh(geom, mat);
-        this.testMesh = mesh;
-        this.scene.add( mesh );
-    }
 
     this.camera.position.z = 5;
 
@@ -144,7 +137,6 @@ ARBase.prototype.updateScene = function (markers) {
 
     if (markers.length > 0) {
         this.animated_mesh.visible = true;
-        this.testMesh.visible = true;
 
         corners = markers[0].corners;
 
@@ -156,26 +148,30 @@ ARBase.prototype.updateScene = function (markers) {
 
         pose = this.positEstimator.pose(corners);
 
-        this.updateObject(this.animated_mesh, pose.bestRotation, pose.bestTranslation, 3.0);
-        this.updateObject(this.testMesh, pose.bestRotation, pose.bestTranslation, 1.0);
+        this.updateObject(
+            this.animated_mesh,
+            pose.bestRotation,
+            [0.0, 3.14/2.0, 0.0],
+            pose.bestTranslation,
+            3.0);
 
-        this.animation_mixer.update( delta );
+        if (this.animation_mixer) {
+            this.animation_mixer.update( delta );
+        }
+
     } else {
         if (this.animated_mesh) {
             this.animated_mesh.visible = false;
         }
-        if (this.testMesh) {
-            this.testMesh.visible = false;
-        }
     }
 }
 
-ARBase.prototype.updateObject = function (object, rotation, translation, scale) {
+ARBase.prototype.updateObject = function (object, rotation, rotationEuler, translation, scale) {
     object.scale.set(scale, scale, scale);
 
-    object.rotation.x = -Math.asin(-rotation[1][2]);
-    object.rotation.y = -Math.atan2(rotation[0][2], rotation[2][2]);
-    object.rotation.z =  Math.atan2(rotation[1][0], rotation[1][1]);
+    object.rotation.x = -Math.asin(-rotation[1][2]) + rotationEuler[0];
+    object.rotation.y = -Math.atan2(rotation[0][2], rotation[2][2]) + rotationEuler[1];
+    object.rotation.z =  Math.atan2(rotation[1][0], rotation[1][1]) + rotationEuler[2];
 
     object.position.x = translation[0];
     object.position.y = translation[1];
